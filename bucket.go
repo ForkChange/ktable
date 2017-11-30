@@ -1,40 +1,39 @@
 package ktable
 
 import (
-	"bytes"
 	"time"
 )
 
 type bucket struct {
-	nodes       []*Node
+	contacts    []Contact
 	left        *bucket
 	right       *bucket
-	lastUpdated time.Time
+	lastChanged time.Time
 	dontSplit   bool
 }
 
 func createBucket() *bucket {
-	k := &bucket{nodes: []*Node{}}
-	k.touch()
+	k := &bucket{contacts: []Contact{}}
+	k.update()
 	return k
 }
 
-func (b *bucket) touch() {
-	b.lastUpdated = time.Now()
+func (b *bucket) update() {
+	b.lastChanged = time.Now()
 }
 
-func (b *bucket) add(node *Node) {
-	b.nodes = append(b.nodes, node)
-	b.touch()
+func (b *bucket) add(contact Contact) {
+	b.contacts = append(b.contacts, contact)
+	b.update()
 }
 
 func (b *bucket) split(bitIndex int) {
 	b.left = createBucket()
 	b.right = createBucket()
-	for _, c := range b.nodes {
-		b.nearChild(c.id, bitIndex).add(c)
+	for _, c := range b.contacts {
+		b.nearChild(c.ID(), bitIndex).add(c)
 	}
-	b.nodes = nil
+	b.contacts = nil
 }
 
 func (b *bucket) nearChild(id ID, bitIndex int) *bucket {
@@ -61,35 +60,35 @@ func (b *bucket) farChild(id ID, bitIndex int) *bucket {
 func (b *bucket) remove(id ID) {
 	index := b.indexOf(id)
 	if index >= 0 {
-		b.nodes[index] = b.nodes[len(b.nodes)-1]
-		b.nodes = b.nodes[:len(b.nodes)-1]
+		b.contacts[index] = b.contacts[len(b.contacts)-1]
+		b.contacts = b.contacts[:len(b.contacts)-1]
 	}
 }
 
 func (b *bucket) indexOf(id ID) int {
-	for i, c := range b.nodes {
-		if bytes.Equal(c.id[:], id[:]) {
+	for i, c := range b.contacts {
+		if c.Equal(id) {
 			return i
 		}
 	}
 	return -1
 }
 
-func (b *bucket) get(id ID) *Node {
+func (b *bucket) get(id ID) Contact {
 	index := b.indexOf(id)
 	if index >= 0 {
-		return b.nodes[index]
+		return b.contacts[index]
 	}
 	return nil
 }
 
-func (b *bucket) stale() []*Node {
-	nodes := make([]*Node, 0)
+func (b *bucket) questionable() []Contact {
+	contacts := make([]Contact, 0)
 	now := time.Now()
-	for _, node := range b.nodes {
-		if now.Sub(node.lastUpdated) > expiredAfter {
-			nodes = append(nodes, node)
+	for _, contact := range b.contacts {
+		if now.Sub(contact.LastChanged()) > expiredAfter {
+			contacts = append(contacts, contact)
 		}
 	}
-	return nodes
+	return contacts
 }

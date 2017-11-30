@@ -5,7 +5,7 @@ package ktable
 
 import (
 	"bytes"
-	"crypto/rand"
+	"net"
 	"sort"
 	"sync"
 	"time"
@@ -15,43 +15,51 @@ const (
 	expiredAfter = 15 * time.Minute
 )
 
-func RandomID() ID {
-	var id [20]byte
-	b := make([]byte, 20)
-	rand.Read(b)
-	copy(id[:], b)
-	return ID(id)
+type ID [20]byte
+
+type Contact interface {
+	ID() ID
+	Address() net.UDPAddr
+	Update()
+	LastChanged() time.Time
+	Distance(target ID) []byte
+	Equal(target ID) bool
 }
 
 type OnPing interface {
-	Ping(old []*Node, new *Node)
+	Ping(questionable []Contact, new Contact)
+}
+
+type OnFindNode interface {
+	FindNode(contacts []Contact)
 }
 
 type byDistance struct {
-	nodes  []*Node
-	target ID
+	contacts []Contact
+	target   ID
 }
 
 func (by *byDistance) Len() int {
-	return len(by.nodes)
+	return len(by.contacts)
 }
 
 func (by *byDistance) Swap(i, j int) {
-	by.nodes[i], by.nodes[j] = by.nodes[j], by.nodes[i]
+	by.contacts[i], by.contacts[j] = by.contacts[j], by.contacts[i]
 }
 
 func (by *byDistance) Less(i, j int) bool {
-	d1 := by.nodes[i].Distance(by.target)
-	d2 := by.nodes[j].Distance(by.target)
+	d1 := by.contacts[i].Distance(by.target)
+	d2 := by.contacts[j].Distance(by.target)
 	return bytes.Compare(d1, d2) == -1
 }
 
 type Table struct {
-	localID ID
-	k       int
-	root    *bucket
-	onPing  OnPing
-	rw      sync.RWMutex
+	localID    ID
+	k          int
+	root       *bucket
+	onPing     OnPing
+	onFindNode OnFindNode
+	rw         sync.RWMutex
 }
 
 func NewTable(numOfBucket int, localID ID) *Table {
@@ -60,21 +68,21 @@ func NewTable(numOfBucket int, localID ID) *Table {
 	return rt
 }
 
-func (t *Table) Add(node *Node) {
+func (t *Table) Add(contact Contact) {
 	t.rw.Lock()
-	b, bitIndex := t.locateBucket(node.id)
-	if b.has(node.id) {
+	b, bitIndex := t.locateBucket(contact.ID())
+	if b.has(contact.ID()) {
 		t.rw.Unlock()
 		return
 	}
-	if len(b.nodes) < t.k {
-		b.add(node)
+	if len(b.contacts) < t.k {
+		b.add(contact)
 		t.rw.Unlock()
 		return
 	}
 	if b.dontSplit {
-		if old := b.stale(); t.onPing != nil && len(old) > 0 {
-			go t.onPing.Ping(old, node)
+		if contacts := b.questionable(); t.onPing != nil && len(contacts) > 0 {
+			go t.onPing.Ping(contacts, contact)
 		}
 		t.rw.Unlock()
 		return
@@ -83,11 +91,15 @@ func (t *Table) Add(node *Node) {
 	b.farChild(t.localID, bitIndex).dontSplit = true
 	t.rw.Unlock()
 
-	t.Add(node)
+	t.Add(contact)
 }
 
 func (t *Table) OnPing(op OnPing) {
 	t.onPing = op
+}
+
+func (t *Table) OnFindNode(of OnFindNode) {
+	t.onFindNode = of
 }
 
 func (t *Table) Has(id ID) bool {
@@ -105,52 +117,45 @@ func (t *Table) Remove(id ID) {
 }
 
 func (t *Table) Count() int {
-	return len(t.Dump())
+	t.rw.RLock()
+	defer t.rw.RUnlock()
+	n := 0
+	for _, bucket := range t.nonEmptyBuckets() {
+		n += len(bucket.contacts)
+	}
+	return n
 }
 
-func (t *Table) Touch(id ID) {
+func (t *Table) Update(id ID) {
 	t.rw.Lock()
 	defer t.rw.Unlock()
 	bucket, _ := t.locateBucket(id)
-	bucket.touch()
-	if node := bucket.get(id); node != nil {
-		node.touch()
+	bucket.update()
+	if contact := bucket.get(id); contact != nil {
+		contact.Update()
 	}
 }
 
-func (t *Table) Load(nodes []*Node) {
-	for _, node := range nodes {
-		t.Add(node)
-	}
-}
-
-func (t *Table) Dump() []*Node {
+func (t *Table) Dump() []Contact {
 	t.rw.RLock()
 	defer t.rw.RUnlock()
-	nodes := make([]*Node, 0)
-	buckets := []*bucket{t.root}
-	var bucket *bucket
-	for len(buckets) > 0 {
-		bucket, buckets = buckets[0], buckets[1:len(buckets)]
-		if bucket.nodes == nil {
-			buckets = append(buckets, bucket.left, bucket.right)
-		} else {
-			nodes = append(nodes, bucket.nodes...)
-		}
+	contacts := make([]Contact, 0)
+	for _, bucket := range t.nonEmptyBuckets() {
+		contacts = append(contacts, bucket.contacts...)
 	}
-	return nodes
+	return contacts
 }
 
-func (t *Table) Closest(target ID, limit int) []*Node {
+func (t *Table) Closest(target ID, limit int) []Contact {
 	t.rw.RLock()
 	defer t.rw.RUnlock()
 	bitIndex := 0
 	buckets := []*bucket{t.root}
-	nodes := make([]*Node, 0, limit)
+	contacts := make([]Contact, 0, limit)
 	var bucket *bucket
-	for len(buckets) > 0 && len(nodes) < limit {
+	for len(buckets) > 0 && len(contacts) < limit {
 		bucket, buckets = buckets[len(buckets)-1], buckets[:len(buckets)-1]
-		if bucket.nodes == nil {
+		if bucket.contacts == nil {
 			child := bucket.nearChild(target, bitIndex)
 			if child == bucket.left {
 				buckets = append(buckets, bucket.right)
@@ -160,43 +165,50 @@ func (t *Table) Closest(target ID, limit int) []*Node {
 			buckets = append(buckets, child)
 			bitIndex++
 		} else {
-			nodes = append(nodes, bucket.nodes...)
+			contacts = append(contacts, bucket.contacts...)
 		}
 	}
-	if length := len(nodes); limit > length {
+	if length := len(contacts); limit > length {
 		limit = length
 	}
-	sort.Sort(&byDistance{target: target, nodes: nodes})
-	return nodes[:limit]
+	sort.Sort(&byDistance{target: target, contacts: contacts})
+	return contacts[:limit]
 }
 
-func (t *Table) Fresh() {
-	if t.onPing == nil {
+func (t *Table) Refresh() {
+	if t.onFindNode == nil {
 		return
 	}
 	t.rw.RLock()
 	defer t.rw.RUnlock()
-	buckets := []*bucket{t.root}
-	var bucket *bucket
 	now := time.Now()
-	for len(buckets) > 0 {
-		bucket, buckets = buckets[len(buckets)-1], buckets[:len(buckets)-1]
-		if bucket.nodes == nil {
-			buckets = append(buckets, bucket.right, bucket.left)
-			continue
-		}
-		if now.Sub(bucket.lastUpdated) < expiredAfter {
-			continue
-		}
-		if old := bucket.stale(); len(old) > 0 {
-			go t.onPing.Ping(old, nil)
+	for _, bucket := range t.nonEmptyBuckets() {
+		if now.Sub(bucket.lastChanged) > expiredAfter {
+			go t.onFindNode.FindNode(bucket.contacts)
 		}
 	}
 }
 
+func (t *Table) nonEmptyBuckets() []*bucket {
+	nonEmpty := make([]*bucket, 0)
+	buckets := []*bucket{t.root}
+	var bucket *bucket
+	for len(buckets) > 0 {
+		bucket, buckets = buckets[0], buckets[1:len(buckets)]
+		if bucket.contacts == nil {
+			buckets = append(buckets, bucket.left, bucket.right)
+			continue
+		}
+		if len(bucket.contacts) > 0 {
+			nonEmpty = append(nonEmpty, bucket)
+		}
+	}
+	return nonEmpty
+}
+
 func (t *Table) locateBucket(id ID) (bucket *bucket, bitIndex int) {
 	bucket = t.root
-	for bucket.nodes == nil {
+	for bucket.contacts == nil {
 		bucket = bucket.nearChild(id, bitIndex)
 		bitIndex++
 	}
