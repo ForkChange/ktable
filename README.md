@@ -12,6 +12,20 @@ go get "github.com/fanpei91/ktable"
 import "github.com/fanpei91/ktable"
 ```
 
+#### type Contact
+
+```go
+type Contact interface {
+	ID() ID
+	Address() net.UDPAddr
+	Update()
+	LastChanged() time.Time
+	Distance(target ID) []byte
+	Equal(target ID) bool
+}
+```
+
+
 #### type ID
 
 ```go
@@ -19,44 +33,20 @@ type ID [20]byte
 ```
 
 
-#### func  RandomID
+#### type OnFindNode
 
 ```go
-func RandomID() ID
-```
-
-#### type Node
-
-```go
-type Node struct {
+type OnFindNode interface {
+	FindNode(contacts []Contact)
 }
 ```
 
-
-#### func  NewNode
-
-```go
-func NewNode(address *net.UDPAddr, id ID) *Node
-```
-
-#### func (*Node) Distance
-
-```go
-func (n *Node) Distance(target ID) []byte
-```
-
-#### func (*Node) String
-
-```go
-func (n *Node) String() string
-```
-Node ID + IP + BigEndian(Port)
 
 #### type OnPing
 
 ```go
 type OnPing interface {
-	Ping(old []*Node, new *Node)
+	Ping(questionable []Contact, new Contact)
 }
 ```
 
@@ -78,13 +68,13 @@ func NewTable(numOfBucket int, localID ID) *Table
 #### func (*Table) Add
 
 ```go
-func (t *Table) Add(node *Node)
+func (t *Table) Add(contact Contact)
 ```
 
 #### func (*Table) Closest
 
 ```go
-func (t *Table) Closest(target ID, limit int) []*Node
+func (t *Table) Closest(target ID, limit int) []Contact
 ```
 
 #### func (*Table) Count
@@ -96,13 +86,7 @@ func (t *Table) Count() int
 #### func (*Table) Dump
 
 ```go
-func (t *Table) Dump() []*Node
-```
-
-#### func (*Table) Fresh
-
-```go
-func (t *Table) Fresh()
+func (t *Table) Dump() []Contact
 ```
 
 #### func (*Table) Has
@@ -111,10 +95,10 @@ func (t *Table) Fresh()
 func (t *Table) Has(id ID) bool
 ```
 
-#### func (*Table) Load
+#### func (*Table) OnFindNode
 
 ```go
-func (t *Table) Load(nodes []*Node)
+func (t *Table) OnFindNode(of OnFindNode)
 ```
 
 #### func (*Table) OnPing
@@ -123,14 +107,20 @@ func (t *Table) Load(nodes []*Node)
 func (t *Table) OnPing(op OnPing)
 ```
 
+#### func (*Table) Refresh
+
+```go
+func (t *Table) Refresh()
+```
+
 #### func (*Table) Remove
 
 ```go
 func (t *Table) Remove(id ID)
 ```
 
-#### func (*Table) Touch
+#### func (*Table) Update
 
 ```go
-func (t *Table) Touch(id ID)
+func (t *Table) Update(id ID)
 ```
