@@ -1,10 +1,16 @@
 # ktable
---
-    import "github.com/fanpei91/ktable"
 
-* The DHT's routing table implementation in Golang.
+The DHT's routing table implementation in Golang.
+
+## Install
+```bash
+go get "github.com/fanpei91/ktable"
+```
 
 ## Usage
+```go
+import "github.com/fanpei91/ktable"
+```
 
 #### type ID
 
