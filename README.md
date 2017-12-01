@@ -12,6 +12,7 @@ go get "github.com/fanpei91/ktable"
 import "github.com/fanpei91/ktable"
 ```
 
+
 #### type Contact
 
 ```go
@@ -20,8 +21,6 @@ type Contact interface {
 	Address() net.UDPAddr
 	Update()
 	LastChanged() time.Time
-	Distance(target ID) []byte
-	Equal(target ID) bool
 }
 ```
 
@@ -46,7 +45,7 @@ type OnFindNode interface {
 
 ```go
 type OnPing interface {
-	Ping(questionable []Contact, new Contact)
+	Ping(doubtful []Contact, new Contact)
 }
 ```
 
@@ -55,14 +54,19 @@ type OnPing interface {
 
 ```go
 type Table struct {
+	ExpiredAfter time.Duration
+	LocalID      ID
+	NumOfBucket  int
+	OnPing       OnPing
+	OnFindNode   OnFindNode
 }
 ```
 
 
-#### func  NewTable
+#### func  New
 
 ```go
-func NewTable(numOfBucket int, localID ID) *Table
+func New(localID ID, of OnFindNode, op OnPing, options ...func(*Table)) *Table
 ```
 
 #### func (*Table) Add
@@ -93,18 +97,6 @@ func (t *Table) Dump() []Contact
 
 ```go
 func (t *Table) Has(id ID) bool
-```
-
-#### func (*Table) OnFindNode
-
-```go
-func (t *Table) OnFindNode(of OnFindNode)
-```
-
-#### func (*Table) OnPing
-
-```go
-func (t *Table) OnPing(op OnPing)
 ```
 
 #### func (*Table) Refresh
