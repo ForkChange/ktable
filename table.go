@@ -56,27 +56,34 @@ func (by *byDistance) distance(id ID) []byte {
 }
 
 type Table struct {
-	ExpiredAfter time.Duration
-	LocalID      ID
-	NumOfBucket  int
-	OnPing       OnPing
-	OnFindNode   OnFindNode
-	root         *bucket
-	rw           sync.RWMutex
+	ExpiredAfter  time.Duration
+	LocalID       ID
+	NumOfBucket   int
+	OnPing        OnPing
+	OnFindNode    OnFindNode
+	RefreshPeriod time.Duration
+	root          *bucket
+	rw            sync.RWMutex
 }
 
 func New(localID ID, of OnFindNode, op OnPing, options ...func(*Table)) *Table {
 	rt := &Table{
-		LocalID:      localID,
-		NumOfBucket:  20,
-		OnPing:       op,
-		OnFindNode:   of,
-		ExpiredAfter: 15 * time.Minute,
-		root:         createBucket(),
+		LocalID:       localID,
+		NumOfBucket:   20,
+		OnPing:        op,
+		OnFindNode:    of,
+		ExpiredAfter:  15 * time.Minute,
+		RefreshPeriod: 1 * time.Minute,
+		root:          createBucket(),
 	}
 	for _, option := range options {
 		option(rt)
 	}
+	go func() {
+		for range time.Tick(rt.RefreshPeriod) {
+			rt.Refresh()
+		}
+	}()
 	return rt
 }
 
