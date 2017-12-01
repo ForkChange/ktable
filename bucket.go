@@ -1,6 +1,7 @@
 package ktable
 
 import (
+	"bytes"
 	"time"
 )
 
@@ -65,7 +66,7 @@ func (b *bucket) remove(id ID) {
 
 func (b *bucket) indexOf(id ID) int {
 	for i, c := range b.contacts {
-		if c.Equal(id) {
+		if b.equal(c.ID(), id) {
 			return i
 		}
 	}
@@ -79,13 +80,6 @@ func (b *bucket) find(id ID) Contact {
 	return nil
 }
 
-func (b *bucket) questionable() []Contact {
-	contacts := make([]Contact, 0)
-	now := time.Now()
-	for _, contact := range b.contacts {
-		if now.Sub(contact.LastChanged()) > expiredAfter {
-			contacts = append(contacts, contact)
-		}
-	}
-	return contacts
+func (b *bucket) equal(first ID, second ID) bool {
+	return bytes.Equal(first[:], second[:])
 }

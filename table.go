@@ -11,10 +11,6 @@ import (
 	"time"
 )
 
-const (
-	expiredAfter = 15 * time.Minute
-)
-
 type ID [20]byte
 
 type Contact interface {
@@ -22,12 +18,10 @@ type Contact interface {
 	Address() net.UDPAddr
 	Update()
 	LastChanged() time.Time
-	Distance(target ID) []byte
-	Equal(target ID) bool
 }
 
 type OnPing interface {
-	Ping(questionable []Contact, new Contact)
+	Ping(doubtful []Contact, new Contact)
 }
 
 type OnFindNode interface {
@@ -48,28 +42,41 @@ func (by *byDistance) Swap(i, j int) {
 }
 
 func (by *byDistance) Less(i, j int) bool {
-	d1 := by.contacts[i].Distance(by.target)
-	d2 := by.contacts[j].Distance(by.target)
+	d1 := by.distance(by.contacts[i].ID())
+	d2 := by.distance(by.contacts[j].ID())
 	return bytes.Compare(d1, d2) == -1
 }
 
-type Table struct {
-	localID    ID
-	k          int
-	root       *bucket
-	onPing     OnPing
-	onFindNode OnFindNode
-	rw         sync.RWMutex
+func (by *byDistance) distance(id ID) []byte {
+	d := make([]byte, 20)
+	for i := range id {
+		d[i] = id[i] ^ by.target[i]
+	}
+	return d
 }
 
-func New(localID ID, numOfBucket int, of OnFindNode, op OnPing) *Table {
+type Table struct {
+	ExpiredAfter time.Duration
+	LocalID      ID
+	NumOfBucket  int
+	OnPing       OnPing
+	OnFindNode   OnFindNode
+	root         *bucket
+	rw           sync.RWMutex
+}
+
+func New(localID ID, of OnFindNode, op OnPing, options ...func(*Table)) *Table {
 	rt := &Table{
-		localID:    localID,
-		k:          numOfBucket,
-		onPing:     op,
-		onFindNode: of,
+		LocalID:      localID,
+		NumOfBucket:  20,
+		OnPing:       op,
+		OnFindNode:   of,
+		ExpiredAfter: 15 * time.Minute,
+		root:         createBucket(),
 	}
-	rt.root = createBucket()
+	for _, option := range options {
+		option(rt)
+	}
 	return rt
 }
 
@@ -80,20 +87,20 @@ func (t *Table) Add(contact Contact) {
 		t.rw.Unlock()
 		return
 	}
-	if len(b.contacts) < t.k {
+	if len(b.contacts) < t.NumOfBucket {
 		b.add(contact)
 		t.rw.Unlock()
 		return
 	}
 	if b.dontSplit {
-		if contacts := b.questionable(); len(contacts) > 0 {
-			go t.onPing.Ping(contacts, contact)
+		if contacts := t.doubtful(b); len(contacts) > 0 {
+			go t.OnPing.Ping(contacts, contact)
 		}
 		t.rw.Unlock()
 		return
 	}
 	b.split(bitIndex)
-	b.farChild(t.localID, bitIndex).dontSplit = true
+	b.farChild(t.LocalID, bitIndex).dontSplit = true
 	t.rw.Unlock()
 
 	t.Add(contact)
@@ -173,8 +180,8 @@ func (t *Table) Refresh() {
 	defer t.rw.RUnlock()
 	now := time.Now()
 	for _, bucket := range t.nonEmptyBuckets() {
-		if now.Sub(bucket.lastChanged) > expiredAfter {
-			go t.onFindNode.FindNode(bucket.contacts)
+		if now.Sub(bucket.lastChanged) > t.ExpiredAfter {
+			go t.OnFindNode.FindNode(bucket.contacts)
 		}
 	}
 }
@@ -203,4 +210,15 @@ func (t *Table) locateBucket(id ID) (bucket *bucket, bitIndex int) {
 		bitIndex++
 	}
 	return
+}
+
+func (t *Table) doubtful(b *bucket) []Contact {
+	contacts := make([]Contact, 0)
+	now := time.Now()
+	for _, contact := range b.contacts {
+		if now.Sub(contact.LastChanged()) > t.ExpiredAfter {
+			contacts = append(contacts, contact)
+		}
+	}
+	return contacts
 }
