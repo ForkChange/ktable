@@ -12,7 +12,6 @@ go get "github.com/fanpei91/ktable"
 import "github.com/fanpei91/ktable"
 ```
 
-
 #### type Contact
 
 ```go
@@ -54,11 +53,12 @@ type OnPing interface {
 
 ```go
 type Table struct {
-	ExpiredAfter time.Duration
-	LocalID      ID
-	NumOfBucket  int
-	OnPing       OnPing
-	OnFindNode   OnFindNode
+	ExpiredAfter  time.Duration
+	LocalID       ID
+	NumOfBucket   int
+	OnPing        OnPing
+	OnFindNode    OnFindNode
+	RefreshPeriod time.Duration
 }
 ```
 
