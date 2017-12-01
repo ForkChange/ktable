@@ -131,7 +131,7 @@ func (t *Table) Update(id ID) {
 	defer t.rw.Unlock()
 	bucket, _ := t.locateBucket(id)
 	bucket.update()
-	if contact := bucket.get(id); contact != nil {
+	if contact := bucket.find(id); contact != nil {
 		contact.Update()
 	}
 }

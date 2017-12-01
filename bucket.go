@@ -50,16 +50,14 @@ func (b *bucket) has(id ID) bool {
 }
 
 func (b *bucket) farChild(id ID, bitIndex int) *bucket {
-	c := b.nearChild(id, bitIndex)
-	if c == b.right {
+	if c := b.nearChild(id, bitIndex); c == b.right {
 		return b.left
 	}
 	return b.right
 }
 
 func (b *bucket) remove(id ID) {
-	index := b.indexOf(id)
-	if index >= 0 {
+	if index := b.indexOf(id); index > -1 {
 		b.contacts[index] = b.contacts[len(b.contacts)-1]
 		b.contacts = b.contacts[:len(b.contacts)-1]
 	}
@@ -74,9 +72,8 @@ func (b *bucket) indexOf(id ID) int {
 	return -1
 }
 
-func (b *bucket) get(id ID) Contact {
-	index := b.indexOf(id)
-	if index >= 0 {
+func (b *bucket) find(id ID) Contact {
+	if index := b.indexOf(id); index > -1 {
 		return b.contacts[index]
 	}
 	return nil
