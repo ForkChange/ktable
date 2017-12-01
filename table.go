@@ -156,13 +156,9 @@ func (t *Table) Closest(target ID, limit int) []Contact {
 	for len(buckets) > 0 && len(contacts) < limit {
 		bucket, buckets = buckets[len(buckets)-1], buckets[:len(buckets)-1]
 		if bucket.contacts == nil {
-			child := bucket.nearChild(target, bitIndex)
-			if child == bucket.left {
-				buckets = append(buckets, bucket.right)
-			} else {
-				buckets = append(buckets, bucket.left)
-			}
-			buckets = append(buckets, child)
+			near := bucket.nearChild(target, bitIndex)
+			far := bucket.farChild(target, bitIndex)
+			buckets = append(buckets, far, near)
 			bitIndex++
 		} else {
 			contacts = append(contacts, bucket.contacts...)
