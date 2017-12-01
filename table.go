@@ -62,8 +62,13 @@ type Table struct {
 	rw         sync.RWMutex
 }
 
-func NewTable(numOfBucket int, localID ID) *Table {
-	rt := &Table{localID: localID, k: numOfBucket}
+func New(localID ID, numOfBucket int, of OnFindNode, op OnPing) *Table {
+	rt := &Table{
+		localID:    localID,
+		k:          numOfBucket,
+		onPing:     op,
+		onFindNode: of,
+	}
 	rt.root = createBucket()
 	return rt
 }
@@ -81,7 +86,7 @@ func (t *Table) Add(contact Contact) {
 		return
 	}
 	if b.dontSplit {
-		if contacts := b.questionable(); t.onPing != nil && len(contacts) > 0 {
+		if contacts := b.questionable(); len(contacts) > 0 {
 			go t.onPing.Ping(contacts, contact)
 		}
 		t.rw.Unlock()
@@ -92,14 +97,6 @@ func (t *Table) Add(contact Contact) {
 	t.rw.Unlock()
 
 	t.Add(contact)
-}
-
-func (t *Table) OnPing(op OnPing) {
-	t.onPing = op
-}
-
-func (t *Table) OnFindNode(of OnFindNode) {
-	t.onFindNode = of
 }
 
 func (t *Table) Has(id ID) bool {
@@ -172,9 +169,6 @@ func (t *Table) Closest(target ID, limit int) []Contact {
 }
 
 func (t *Table) Refresh() {
-	if t.onFindNode == nil {
-		return
-	}
 	t.rw.RLock()
 	defer t.rw.RUnlock()
 	now := time.Now()
