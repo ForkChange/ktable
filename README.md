@@ -12,6 +12,24 @@ go get "github.com/fanpei91/ktable"
 import "github.com/fanpei91/ktable"
 ```
 
+#### func  ExpiredAfter
+
+```go
+func ExpiredAfter(d time.Duration) option
+```
+
+#### func  NumOfBucket
+
+```go
+func NumOfBucket(n int) option
+```
+
+#### func  RefreshPeriod
+
+```go
+func RefreshPeriod(d time.Duration) option
+```
+
 #### type Contact
 
 ```go
@@ -53,12 +71,6 @@ type OnPing interface {
 
 ```go
 type Table struct {
-	ExpiredAfter  time.Duration
-	LocalID       ID
-	NumOfBucket   int
-	OnPing        OnPing
-	OnFindNode    OnFindNode
-	RefreshPeriod time.Duration
 }
 ```
 
@@ -66,7 +78,7 @@ type Table struct {
 #### func  New
 
 ```go
-func New(localID ID, of OnFindNode, op OnPing, options ...func(*Table)) *Table
+func New(localID ID, of OnFindNode, op OnPing, options ...option) *Table
 ```
 
 #### func (*Table) Add
