@@ -56,21 +56,21 @@ func (by *byDistance) distance(id ID) []byte {
 }
 
 type Table struct {
-	expiredAfter  time.Duration
-	localID       ID
-	numOfBucket   int
-	onPing        OnPing
-	onFindNode    OnFindNode
-	refreshPeriod time.Duration
-	root          *bucket
-	rw            sync.RWMutex
+	expiredAfter   time.Duration
+	localID        ID
+	numOfPerBucket int
+	onPing         OnPing
+	onFindNode     OnFindNode
+	refreshPeriod  time.Duration
+	root           *bucket
+	rw             sync.RWMutex
 }
 
 type option func(*Table)
 
-func NumOfBucket(n int) option {
+func NumOfPerBucket(n int) option {
 	return func(t *Table) {
-		t.numOfBucket = n
+		t.numOfPerBucket = n
 	}
 }
 
@@ -88,13 +88,13 @@ func RefreshPeriod(d time.Duration) option {
 
 func New(localID ID, of OnFindNode, op OnPing, options ...option) *Table {
 	rt := &Table{
-		localID:       localID,
-		numOfBucket:   20,
-		onPing:        op,
-		onFindNode:    of,
-		expiredAfter:  15 * time.Minute,
-		refreshPeriod: 1 * time.Minute,
-		root:          createBucket(),
+		localID:        localID,
+		numOfPerBucket: 20,
+		onPing:         op,
+		onFindNode:     of,
+		expiredAfter:   15 * time.Minute,
+		refreshPeriod:  1 * time.Minute,
+		root:           createBucket(),
 	}
 	for _, option := range options {
 		option(rt)
@@ -114,7 +114,7 @@ func (t *Table) Add(contact Contact) {
 		t.rw.Unlock()
 		return
 	}
-	if len(b.contacts) < t.numOfBucket {
+	if len(b.contacts) < t.numOfPerBucket {
 		b.add(contact)
 		t.rw.Unlock()
 		return

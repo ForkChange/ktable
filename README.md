@@ -18,10 +18,10 @@ import "github.com/fanpei91/ktable"
 func ExpiredAfter(d time.Duration) option
 ```
 
-#### func  NumOfBucket
+#### func  NumOfPerBucket
 
 ```go
-func NumOfBucket(n int) option
+func NumOfPerBucket(n int) option
 ```
 
 #### func  RefreshPeriod
